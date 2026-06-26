@@ -4,6 +4,8 @@ from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.wash import Wash
 from app.models.booking import Booking, BookingStatus
+from app.routers.booking import to_detail
+from app.schemas.booking import BookingDetailResponse
 from app.utils.dependencies import get_current_user
 from pydantic import BaseModel
 from typing import List
@@ -22,6 +24,22 @@ def check_super_admin(current_user: dict):
 def check_owner_or_admin(current_user: dict):
     if current_user.get("role") not in ["owner", "super_admin"]:
         raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+def check_ops_access(current_user: dict):
+    """Owner, supervisor, or super_admin — operational (non-financial) views."""
+    if current_user.get("role") not in ["owner", "supervisor", "super_admin"]:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+def get_my_wash(db: Session, current_user: dict) -> Wash | None:
+    role = current_user.get("role")
+    uid = int(current_user["sub"])
+    if role == "owner":
+        return db.query(Wash).filter(Wash.owner_id == uid).first()
+    if role in ("employee", "supervisor"):
+        user = db.query(User).filter(User.id == uid).first()
+        if user and user.wash_id:
+            return db.query(Wash).filter(Wash.id == user.wash_id).first()
+    return None
 
 @router.get("/washes")
 def get_all_washes(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -131,9 +149,8 @@ def get_audit_log(db: Session = Depends(get_db), current_user: dict = Depends(ge
 
 @router.get("/my-employees")
 def get_my_employees(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    check_owner_or_admin(current_user)
-    owner_id = int(current_user["sub"])
-    wash = db.query(Wash).filter(Wash.owner_id == owner_id).first()
+    check_ops_access(current_user)
+    wash = get_my_wash(db, current_user)
     if not wash:
         raise HTTPException(status_code=404, detail="لا توجد مغسلة مرتبطة بحسابك")
     employees = db.query(User).filter(
@@ -141,6 +158,22 @@ def get_my_employees(db: Session = Depends(get_db), current_user: dict = Depends
         User.role.in_([UserRole.employee, UserRole.supervisor])
     ).all()
     return [{"id": e.id, "phone": e.phone, "name": e.name, "role": e.role.value, "is_active": e.is_active} for e in employees]
+
+
+@router.get("/my-bookings", response_model=List[BookingDetailResponse])
+def get_my_bookings(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    check_ops_access(current_user)
+    wash = get_my_wash(db, current_user)
+    if not wash:
+        raise HTTPException(status_code=404, detail="لا توجد مغسلة مرتبطة بحسابك")
+    bookings = (
+        db.query(Booking)
+        .filter(Booking.wash_id == wash.id)
+        .order_by(Booking.appointment_time.desc())
+        .limit(100)
+        .all()
+    )
+    return [to_detail(db, b) for b in bookings]
 
 @router.post("/add-employee")
 def add_employee(request: AddEmployeeRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
