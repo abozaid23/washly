@@ -6,7 +6,7 @@ from app.models.user import User, UserRole
 from app.schemas.auth import SendOTPRequest, VerifyOTPRequest, TokenResponse
 from app.utils.auth import create_access_token
 from app.utils.dependencies import get_current_user
-from app.utils.otp import generate_otp, verify_otp
+from app.utils.otp import can_send_otp, generate_otp, verify_otp
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -22,6 +22,11 @@ def normalize_phone(phone: str) -> str:
 @router.post("/send-otp")
 def send_otp(request: SendOTPRequest, db: Session = Depends(get_db)):
     phone = normalize_phone(request.phone)
+    if not can_send_otp(phone):
+        raise HTTPException(
+            status_code=429,
+            detail="عدد محاولات كبير، حاول تاني بعد ساعة",
+        )
     otp = generate_otp(phone)
     print(f"OTP for {phone}: {otp}")
     return {"message": "OTP sent successfully"}

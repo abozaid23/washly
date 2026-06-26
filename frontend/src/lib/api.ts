@@ -180,6 +180,7 @@ export interface BookingDetail extends Booking {
   wash_name: string;
   wash_address: string;
   vehicle_label: string | null;
+  rated: boolean;
 }
 
 export function createBooking(data: {
@@ -200,6 +201,23 @@ export function joinWaitlist(washId: number, appointmentTimeIso: string) {
 
 export function myBookings() {
   return api.get<BookingDetail[]>("/bookings/my");
+}
+
+export function cancelBooking(bookingId: number) {
+  return api.patch<Booking>(`/bookings/${bookingId}/status`, { status: "cancelled" });
+}
+
+export interface Rating {
+  id: number;
+  booking_id: number;
+  wash_id: number;
+  stars: number;
+  comment: string | null;
+  created_at: string;
+}
+
+export function rateBooking(bookingId: number, data: { stars: number; comment?: string }) {
+  return api.post<Rating>(`/bookings/${bookingId}/rate`, data);
 }
 
 export function todayBookings() {

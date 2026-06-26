@@ -3,8 +3,22 @@ import string
 from datetime import datetime, timedelta
 
 otp_store = {}
+otp_attempts = {}
+
+MAX_SEND_PER_HOUR = 3
+SEND_WINDOW = timedelta(hours=1)
+
+
+def can_send_otp(phone: str) -> bool:
+    """Rate limit: at most MAX_SEND_PER_HOUR OTP requests per phone per hour."""
+    now = datetime.now()
+    attempts = [t for t in otp_attempts.get(phone, []) if now - t < SEND_WINDOW]
+    otp_attempts[phone] = attempts
+    return len(attempts) < MAX_SEND_PER_HOUR
+
 
 def generate_otp(phone: str) -> str:
+    otp_attempts.setdefault(phone, []).append(datetime.now())
     otp = ''.join(random.choices(string.digits, k=6))
     otp_store[phone] = {
         "otp": otp,

@@ -20,17 +20,21 @@ from app.models import (
     waitlist as waitlist_model,
     service as service_model,
     employee_specialization as employee_specialization_model,
+    rating as rating_model,
 )
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="washly API", version="1.0.0")
 
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,6 +49,10 @@ app.include_router(leave_router)
 app.include_router(waitlist_router)
 app.include_router(service_router)
 app.include_router(employee_specialization_router)
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 @app.get("/")
 def root():

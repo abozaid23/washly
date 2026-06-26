@@ -11,7 +11,9 @@ from app.models.user import User, UserRole
 from app.models.wash import Wash
 from app.models.vehicle import Vehicle
 from app.models.waitlist import WaitlistEntry
+from app.models.rating import Rating
 from app.schemas.booking import BookingCreate, BookingResponse, BookingDetailResponse, CheckinRequest
+from app.schemas.rating import RatingCreate, RatingResponse
 from app.utils.dependencies import get_current_user
 from pydantic import BaseModel
 
@@ -93,6 +95,7 @@ def to_detail(db: Session, booking: Booking) -> BookingDetailResponse:
         vehicle = db.query(Vehicle).filter(Vehicle.id == booking.vehicle_id).first()
         if vehicle:
             vehicle_label = f"{vehicle.brand} {vehicle.model} · {vehicle.plate_number}"
+    rated = db.query(Rating).filter(Rating.booking_id == booking.id).first() is not None
     return BookingDetailResponse(
         id=booking.id,
         customer_id=booking.customer_id,
@@ -103,6 +106,7 @@ def to_detail(db: Session, booking: Booking) -> BookingDetailResponse:
         access_code=booking.access_code,
         total_price=booking.total_price or 0,
         total_minutes=booking.total_minutes or 0,
+        rated=rated,
         wash_name=wash.name if wash else "",
         wash_address=wash.address if wash else "",
         vehicle_label=vehicle_label,
@@ -354,3 +358,43 @@ def checkin_booking(
     db.commit()
     db.refresh(booking)
     return booking
+
+
+@router.post("/{booking_id}/rate", response_model=RatingResponse)
+def rate_booking(
+    booking_id: int,
+    data: RatingCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    customer_id = int(current_user["sub"])
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="الحجز غير موجود")
+    if booking.customer_id != customer_id:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if booking.status != BookingStatus.completed:
+        raise HTTPException(status_code=400, detail="التقييم متاح بس بعد اكتمال الزيارة")
+
+    existing = db.query(Rating).filter(Rating.booking_id == booking_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="تم تقييم الزيارة دي قبل كذا")
+
+    rating = Rating(
+        booking_id=booking_id,
+        customer_id=customer_id,
+        wash_id=booking.wash_id,
+        stars=data.stars,
+        comment=data.comment,
+    )
+    db.add(rating)
+    db.commit()
+    db.refresh(rating)
+
+    wash = db.query(Wash).filter(Wash.id == booking.wash_id).first()
+    if wash:
+        all_ratings = db.query(Rating).filter(Rating.wash_id == wash.id).all()
+        wash.rating = sum(r.stars for r in all_ratings) / len(all_ratings)
+        db.commit()
+
+    return rating

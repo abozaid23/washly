@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ApiError, myBookings, type BookingDetail, type BookingStatus } from "@/lib/api";
+import {
+  ApiError,
+  cancelBooking,
+  myBookings,
+  rateBooking,
+  type BookingDetail,
+  type BookingStatus,
+} from "@/lib/api";
 
 const STATUS_LABEL: Record<BookingStatus, string> = {
   confirmed: "مؤكد",
@@ -46,6 +53,10 @@ export default function BookingsPage() {
       .catch((err) => setError(err instanceof ApiError ? err.message : "معدرنا نجيب حجوزاتك"))
       .finally(() => setLoading(false));
   }, [router]);
+
+  function updateBooking(updated: BookingDetail) {
+    setBookings((prev) => prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)));
+  }
 
   const { upcoming, past } = useMemo(() => {
     const now = Date.now();
@@ -96,7 +107,12 @@ export default function BookingsPage() {
                 <h2 className="mb-3 text-sm font-bold text-ink">الشغالة دلوقتي</h2>
                 <div className="flex flex-col gap-3">
                   {upcoming.map((b, i) => (
-                    <BookingCard key={b.id} booking={b} style={{ animationDelay: `${i * 50}ms` }} />
+                    <BookingCard
+                      key={b.id}
+                      booking={b}
+                      onUpdate={updateBooking}
+                      style={{ animationDelay: `${i * 50}ms` }}
+                    />
                   ))}
                 </div>
               </section>
@@ -107,7 +123,12 @@ export default function BookingsPage() {
                 <h2 className="mb-3 text-sm font-bold text-ink">القديمة</h2>
                 <div className="flex flex-col gap-3">
                   {past.map((b, i) => (
-                    <BookingCard key={b.id} booking={b} style={{ animationDelay: `${i * 50}ms` }} />
+                    <BookingCard
+                      key={b.id}
+                      booking={b}
+                      onUpdate={updateBooking}
+                      style={{ animationDelay: `${i * 50}ms` }}
+                    />
                   ))}
                 </div>
               </section>
@@ -119,9 +140,36 @@ export default function BookingsPage() {
   );
 }
 
-function BookingCard({ booking, style }: { booking: BookingDetail; style?: React.CSSProperties }) {
+function BookingCard({
+  booking,
+  onUpdate,
+  style,
+}: {
+  booking: BookingDetail;
+  onUpdate: (b: BookingDetail) => void;
+  style?: React.CSSProperties;
+}) {
   const { date, time } = formatDateTime(booking.appointment_time);
   const showCode = booking.access_code && booking.status === "confirmed";
+  const canCancel = booking.status === "confirmed";
+
+  const [cancelling, setCancelling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rating, setRating] = useState(false);
+
+  async function handleCancel() {
+    if (!confirm("متأكد عايز تلغي الحجز ده؟")) return;
+    setCancelling(true);
+    setError(null);
+    try {
+      await cancelBooking(booking.id);
+      onUpdate({ ...booking, status: "cancelled" });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "معدرنا نلغي الحجز");
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   return (
     <div
@@ -157,6 +205,38 @@ function BookingCard({ booking, style }: { booking: BookingDetail; style?: React
         </div>
       ) : null}
 
+      {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
+
+      {canCancel && (
+        <button
+          onClick={handleCancel}
+          disabled={cancelling}
+          className="mt-3 text-sm font-semibold text-danger disabled:opacity-50"
+        >
+          {cancelling ? "بيتلغي..." : "إلغاء الحجز"}
+        </button>
+      )}
+
+      {booking.status === "completed" && !booking.rated && !rating && (
+        <button onClick={() => setRating(true)} className="mt-3 block text-sm font-semibold text-primary">
+          قيّم الزيارة
+        </button>
+      )}
+
+      {rating && (
+        <RatingForm
+          onSubmitted={() => {
+            onUpdate({ ...booking, rated: true });
+            setRating(false);
+          }}
+          bookingId={booking.id}
+        />
+      )}
+
+      {booking.status === "completed" && booking.rated && (
+        <p className="mt-3 text-sm text-faint">تم تقييم الزيارة دي، شكراً 🙏</p>
+      )}
+
       {booking.status === "completed" && (
         <Link
           href={`/wash/${booking.wash_id}`}
@@ -165,6 +245,58 @@ function BookingCard({ booking, style }: { booking: BookingDetail; style?: React
           احجز تاني
         </Link>
       )}
+    </div>
+  );
+}
+
+function RatingForm({ bookingId, onSubmitted }: { bookingId: number; onSubmitted: () => void }) {
+  const [stars, setStars] = useState(5);
+  const [comment, setComment] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setSaving(true);
+    setError(null);
+    try {
+      await rateBooking(bookingId, { stars, comment: comment.trim() || undefined });
+      onSubmitted();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "معدرنا نسجل التقييم");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl bg-surface-raised p-3">
+      <div className="flex justify-center gap-1" dir="ltr">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            onClick={() => setStars(n)}
+            className={`text-2xl transition-colors ${n <= stars ? "text-primary" : "text-faint"}`}
+            aria-label={`${n} نجوم`}
+          >
+            ★
+          </button>
+        ))}
+      </div>
+      <textarea
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder="تعليق (اختياري)"
+        className="input-field mt-2 w-full resize-none"
+        rows={2}
+      />
+      {error ? <p className="mt-1 text-xs text-danger">{error}</p> : null}
+      <button
+        onClick={submit}
+        disabled={saving}
+        className="mt-2 w-full rounded-lg bg-primary py-2 text-sm font-bold text-primary-ink disabled:opacity-50"
+      >
+        {saving ? "جاري الحفظ..." : "إرسال التقييم"}
+      </button>
     </div>
   );
 }
