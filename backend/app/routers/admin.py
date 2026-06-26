@@ -70,17 +70,56 @@ def toggle_user(user_id: int, db: Session = Depends(get_db), current_user: dict 
 def get_revenue(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     check_super_admin(current_user)
     washes = db.query(Wash).all()
-    total = 0
+    total = 0.0
     result = []
     for wash in washes:
-        completed = db.query(Booking).filter(
+        completed_bookings = db.query(Booking).filter(
             Booking.wash_id == wash.id,
             Booking.status == BookingStatus.completed
-        ).count()
-        wash_revenue = completed * (wash.commission_percent / 100) * 100
-        total += wash_revenue
-        result.append({"wash_name": wash.name, "completed_bookings": completed, "commission_percent": wash.commission_percent, "revenue": wash_revenue})
-    return {"total_revenue": total, "washes": result}
+        ).all()
+        wash_total = sum(b.total_price or 0 for b in completed_bookings)
+        commission_due = wash_total * (wash.commission_percent / 100)
+        total += commission_due
+        result.append({
+            "wash_id": wash.id,
+            "wash_name": wash.name,
+            "completed_bookings": len(completed_bookings),
+            "total_revenue": wash_total,
+            "commission_percent": wash.commission_percent,
+            "commission_due": commission_due,
+        })
+    return {"total_commission_due": total, "washes": result}
+
+
+@router.get("/my-revenue")
+def get_my_revenue(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    check_owner_or_admin(current_user)
+    owner_id = int(current_user["sub"])
+    wash = db.query(Wash).filter(Wash.owner_id == owner_id).first()
+    if not wash:
+        raise HTTPException(status_code=404, detail="لا توجد مغسلة مرتبطة بحسابك")
+
+    completed_bookings = db.query(Booking).filter(
+        Booking.wash_id == wash.id,
+        Booking.status == BookingStatus.completed
+    ).all()
+    upcoming_count = db.query(Booking).filter(
+        Booking.wash_id == wash.id,
+        Booking.status.in_([BookingStatus.confirmed, BookingStatus.checked_in])
+    ).count()
+
+    gross_revenue = sum(b.total_price or 0 for b in completed_bookings)
+    commission_due = gross_revenue * (wash.commission_percent / 100)
+
+    return {
+        "wash_name": wash.name,
+        "commission_percent": wash.commission_percent,
+        "completed_bookings": len(completed_bookings),
+        "upcoming_bookings": upcoming_count,
+        "gross_revenue": gross_revenue,
+        "commission_due": commission_due,
+        "net_revenue": gross_revenue - commission_due,
+    }
 
 @router.get("/audit")
 def get_audit_log(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey, Enum
 from sqlalchemy.sql import func
 from app.database import Base
 import enum
@@ -19,4 +19,7 @@ class Booking(Base):
     vehicle_id = Column(Integer, ForeignKey("vehicles.id"), nullable=True)
     appointment_time = Column(DateTime(timezone=True), nullable=False)
     status = Column(Enum(BookingStatus, create_type=False), default=BookingStatus.confirmed)
+    access_code = Column(String(6), nullable=True)
+    total_price = Column(Float, default=0)
+    total_minutes = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

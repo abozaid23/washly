@@ -9,14 +9,17 @@ from app.routers.vehicle import router as vehicle_router
 from app.routers.leave import router as leave_router
 from app.routers.waitlist import router as waitlist_router
 from app.routers.service import router as service_router
+from app.routers.employee_specialization import router as employee_specialization_router
 from app.models import (
     user,
     wash as wash_model,
     booking as booking_model,
+    booking_service as booking_service_model,
     vehicle as vehicle_model,
     leave as leave_model,
     waitlist as waitlist_model,
     service as service_model,
+    employee_specialization as employee_specialization_model,
 )
 from dotenv import load_dotenv
 
@@ -41,6 +44,7 @@ app.include_router(vehicle_router)
 app.include_router(leave_router)
 app.include_router(waitlist_router)
 app.include_router(service_router)
+app.include_router(employee_specialization_router)
 
 @app.get("/")
 def root():

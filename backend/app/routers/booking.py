@@ -1,13 +1,17 @@
+import random
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timezone, date, timedelta
 from app.database import get_db
 from app.models.booking import Booking, BookingStatus
-from app.models.user import User
+from app.models.booking_service import BookingService
+from app.models.service import Service
+from app.models.user import User, UserRole
 from app.models.wash import Wash
+from app.models.vehicle import Vehicle
 from app.models.waitlist import WaitlistEntry
-from app.schemas.booking import BookingCreate, BookingResponse
+from app.schemas.booking import BookingCreate, BookingResponse, BookingDetailResponse, CheckinRequest
 from app.utils.dependencies import get_current_user
 from pydantic import BaseModel
 
@@ -32,6 +36,18 @@ def get_slot_count(db: Session, wash_id: int, appointment_time: datetime) -> int
     ).count()
 
 
+def generate_access_code(db: Session) -> str:
+    for _ in range(10):
+        code = f"{random.randint(0, 999999):06d}"
+        exists = db.query(Booking).filter(
+            Booking.access_code == code,
+            Booking.status.in_([BookingStatus.confirmed, BookingStatus.checked_in]),
+        ).first()
+        if not exists:
+            return code
+    return f"{random.randint(0, 999999):06d}"
+
+
 def promote_waitlist(db: Session, wash_id: int, appointment_time: datetime):
     window_start = appointment_time - timedelta(minutes=30)
     window_end   = appointment_time + timedelta(minutes=30)
@@ -48,6 +64,7 @@ def promote_waitlist(db: Session, wash_id: int, appointment_time: datetime):
             wash_id=wash_id,
             appointment_time=entry.appointment_time,
             status=BookingStatus.confirmed,
+            access_code=generate_access_code(db),
         )
         db.add(new_booking)
         entry.status = "confirmed"
@@ -55,6 +72,29 @@ def promote_waitlist(db: Session, wash_id: int, appointment_time: datetime):
             db.commit()
         except Exception:
             db.rollback()
+
+
+def to_detail(db: Session, booking: Booking) -> BookingDetailResponse:
+    wash = db.query(Wash).filter(Wash.id == booking.wash_id).first()
+    vehicle_label = None
+    if booking.vehicle_id:
+        vehicle = db.query(Vehicle).filter(Vehicle.id == booking.vehicle_id).first()
+        if vehicle:
+            vehicle_label = f"{vehicle.brand} {vehicle.model} · {vehicle.plate_number}"
+    return BookingDetailResponse(
+        id=booking.id,
+        customer_id=booking.customer_id,
+        wash_id=booking.wash_id,
+        appointment_time=booking.appointment_time,
+        status=booking.status.value,
+        vehicle_id=booking.vehicle_id,
+        access_code=booking.access_code,
+        total_price=booking.total_price or 0,
+        total_minutes=booking.total_minutes or 0,
+        wash_name=wash.name if wash else "",
+        wash_address=wash.address if wash else "",
+        vehicle_label=vehicle_label,
+    )
 
 
 @router.get("/availability")
@@ -119,15 +159,34 @@ def create_booking(
     if existing:
         raise HTTPException(status_code=400, detail="لديك حجز بالفعل في هذا الوقت في نفس المغسلة")
 
+    services = []
+    if booking.service_ids:
+        services = db.query(Service).filter(
+            Service.id.in_(booking.service_ids),
+            Service.wash_id == booking.wash_id,
+        ).all()
+
+    total_price = sum(s.price for s in services)
+    total_minutes = sum(s.duration_minutes for s in services)
+
     new_booking = Booking(
         customer_id=customer_id,
         wash_id=booking.wash_id,
         appointment_time=appointment_time,
-        vehicle_id=getattr(booking, "vehicle_id", None),
+        vehicle_id=booking.vehicle_id,
+        access_code=generate_access_code(db),
+        total_price=total_price,
+        total_minutes=total_minutes,
     )
     db.add(new_booking)
     db.commit()
     db.refresh(new_booking)
+
+    for service in services:
+        db.add(BookingService(booking_id=new_booking.id, service_id=service.id))
+    if services:
+        db.commit()
+
     return new_booking
 
 
@@ -156,6 +215,7 @@ def quick_booking(
         customer_id=customer.id,
         wash_id=supervisor.wash_id,
         appointment_time=appointment_time,
+        access_code=generate_access_code(db),
     )
     db.add(new_booking)
     db.commit()
@@ -163,21 +223,22 @@ def quick_booking(
     return new_booking
 
 
-@router.get("/my", response_model=List[BookingResponse])
+@router.get("/my", response_model=List[BookingDetailResponse])
 def my_bookings(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     customer_id = int(current_user["sub"])
-    return (
+    bookings = (
         db.query(Booking)
         .filter(Booking.customer_id == customer_id)
         .order_by(Booking.appointment_time.desc())
         .all()
     )
+    return [to_detail(db, b) for b in bookings]
 
 
-@router.get("/today", response_model=List[BookingResponse])
+@router.get("/today", response_model=List[BookingDetailResponse])
 def today_bookings(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -188,11 +249,12 @@ def today_bookings(
         raise HTTPException(status_code=400, detail="المستخدم غير مرتبط بمغسلة")
 
     today = date.today()
-    return db.query(Booking).filter(
+    bookings = db.query(Booking).filter(
         Booking.wash_id == user.wash_id,
         Booking.appointment_time >= datetime.combine(today, datetime.min.time()),
         Booking.appointment_time <  datetime.combine(today, datetime.max.time()),
-    ).all()
+    ).order_by(Booking.appointment_time.asc()).all()
+    return [to_detail(db, b) for b in bookings]
 
 
 @router.patch("/{booking_id}/status", response_model=BookingResponse)
@@ -211,6 +273,9 @@ def update_booking_status(
     except ValueError:
         raise HTTPException(status_code=400, detail="حالة غير صحيحة")
 
+    if new_status == BookingStatus.checked_in:
+        raise HTTPException(status_code=400, detail="لازم تستخدم كود الوصول لتسجيل الوصول")
+
     wash_id          = booking.wash_id
     appointment_time = booking.appointment_time
 
@@ -221,4 +286,34 @@ def update_booking_status(
     if new_status in [BookingStatus.cancelled, BookingStatus.no_show]:
         promote_waitlist(db, wash_id, appointment_time)
 
+    return booking
+
+
+@router.post("/{booking_id}/checkin", response_model=BookingResponse)
+def checkin_booking(
+    booking_id: int,
+    data: CheckinRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") not in ["employee", "supervisor", "owner"]:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="الحجز غير موجود")
+
+    employee = db.query(User).filter(User.id == int(current_user["sub"])).first()
+    if not employee or employee.wash_id != booking.wash_id:
+        raise HTTPException(status_code=403, detail="الحجز غير تابع لمغسلتك")
+
+    if booking.status != BookingStatus.confirmed:
+        raise HTTPException(status_code=400, detail="لا يمكن تأكيد الوصول لهذا الحجز في حالته الحالية")
+
+    if not booking.access_code or booking.access_code != data.access_code.strip():
+        raise HTTPException(status_code=400, detail="كود الوصول غير صحيح")
+
+    booking.status = BookingStatus.checked_in
+    db.commit()
+    db.refresh(booking)
     return booking
