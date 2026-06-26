@@ -1,0 +1,8 @@
+# OS / editor
+.DS_Store
+*.pem
+.vscode/
+.idea/
+
+# impeccable live-mode local state (not project source)
+.impeccable/live/sessions/

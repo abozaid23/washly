@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+/*
+  Washly design tokens — "midnight detailing bay": near-black surfaces,
+  headlight-on-foam citrine as the signature color (not the generic
+  fintech blue), a cool teal for secondary/water cues. OKLCH throughout.
+*/
+:root {
+  --color-bg: oklch(0.07 0 0);
+  --color-surface: oklch(0.12 0.012 113);
+  --color-surface-raised: oklch(0.16 0.014 113);
+  --color-border: oklch(0.26 0.012 113);
+
+  --color-ink: oklch(0.95 0.006 113);
+  --color-muted: oklch(0.62 0.012 113);
+  --color-faint: oklch(0.42 0.012 113);
+
+  --color-primary: oklch(0.80 0.16 113);
+  --color-primary-ink: oklch(0.16 0.02 113);
+  --color-primary-dim: oklch(0.32 0.05 113);
+
+  --color-accent: oklch(0.58 0.12 215);
+  --color-accent-ink: oklch(0.97 0.01 215);
+
+  --color-success: oklch(0.72 0.15 145);
+  --color-danger: oklch(0.65 0.18 25);
+  --color-warning: oklch(0.78 0.14 80);
+
+  --shadow-color: 113 8% 4%;
+
+  /* semantic z-index scale */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal-backdrop: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  --z-tooltip: 600;
+}
+
+@theme inline {
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-raised: var(--color-surface-raised);
+  --color-border: var(--color-border);
+  --color-ink: var(--color-ink);
+  --color-muted: var(--color-muted);
+  --color-faint: var(--color-faint);
+  --color-primary: var(--color-primary);
+  --color-primary-ink: var(--color-primary-ink);
+  --color-primary-dim: var(--color-primary-dim);
+  --color-accent: var(--color-accent);
+  --color-accent-ink: var(--color-accent-ink);
+  --color-success: var(--color-success);
+  --color-danger: var(--color-danger);
+  --color-warning: var(--color-warning);
+  --font-sans: var(--font-cairo);
+
+  --z-base: var(--z-base);
+  --z-dropdown: var(--z-dropdown);
+  --z-sticky: var(--z-sticky);
+  --z-modal-backdrop: var(--z-modal-backdrop);
+  --z-modal: var(--z-modal);
+  --z-toast: var(--z-toast);
+  --z-tooltip: var(--z-tooltip);
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-cairo), "Cairo", system-ui, sans-serif;
+}
+
+h1, h2, h3 {
+  text-wrap: balance;
+  letter-spacing: -0.02em;
+}
+
+p {
+  text-wrap: pretty;
+  max-width: 65ch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
