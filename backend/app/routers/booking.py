@@ -131,6 +131,9 @@ def check_availability(
     if not wash:
         raise HTTPException(status_code=404, detail="المغسلة غير موجودة")
 
+    if not wash.is_active:
+        return {"available": False, "booked": 0, "capacity": wash.capacity or 3}
+
     capacity = wash.capacity or 3
     count = get_slot_count(db, wash_id, apt_time)
 
@@ -158,6 +161,8 @@ def create_booking(
     wash = db.query(Wash).filter(Wash.id == booking.wash_id).first()
     if not wash:
         raise HTTPException(status_code=404, detail="المغسلة غير موجودة")
+    if not wash.is_active:
+        raise HTTPException(status_code=400, detail="المغسلة دي متوقفة دلوقتي ومش بتقبل حجوزات")
 
     capacity = wash.capacity or 3
     if get_slot_count(db, booking.wash_id, appointment_time) >= capacity:

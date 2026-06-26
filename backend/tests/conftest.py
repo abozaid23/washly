@@ -15,7 +15,10 @@ _CLEANUP_SQL = [
     "DELETE FROM ratings WHERE wash_id IN (SELECT id FROM washes WHERE owner_id IN (SELECT id FROM users WHERE phone LIKE :prefix))",
     "DELETE FROM booking_services WHERE booking_id IN (SELECT id FROM bookings WHERE wash_id IN (SELECT id FROM washes WHERE owner_id IN (SELECT id FROM users WHERE phone LIKE :prefix)) OR customer_id IN (SELECT id FROM users WHERE phone LIKE :prefix))",
     "DELETE FROM bookings WHERE wash_id IN (SELECT id FROM washes WHERE owner_id IN (SELECT id FROM users WHERE phone LIKE :prefix)) OR customer_id IN (SELECT id FROM users WHERE phone LIKE :prefix)",
+    "DELETE FROM waitlist_entries WHERE wash_id IN (SELECT id FROM washes WHERE owner_id IN (SELECT id FROM users WHERE phone LIKE :prefix)) OR customer_id IN (SELECT id FROM users WHERE phone LIKE :prefix)",
+    "DELETE FROM employee_specializations WHERE employee_id IN (SELECT id FROM users WHERE phone LIKE :prefix)",
     "UPDATE users SET wash_id = NULL WHERE phone LIKE :prefix",
+    "DELETE FROM services WHERE wash_id IN (SELECT id FROM washes WHERE owner_id IN (SELECT id FROM users WHERE phone LIKE :prefix))",
     "DELETE FROM washes WHERE owner_id IN (SELECT id FROM users WHERE phone LIKE :prefix)",
     "DELETE FROM vehicles WHERE customer_id IN (SELECT id FROM users WHERE phone LIKE :prefix)",
     "DELETE FROM leave_requests WHERE employee_id IN (SELECT id FROM users WHERE phone LIKE :prefix)",
@@ -31,8 +34,11 @@ def _cleanup_test_rows():
     cleanup_session = SessionLocal()
     try:
         for stmt in _CLEANUP_SQL:
-            cleanup_session.execute(text(stmt), {"prefix": f"{TEST_PHONE_PREFIX}%"})
-        cleanup_session.commit()
+            try:
+                cleanup_session.execute(text(stmt), {"prefix": f"{TEST_PHONE_PREFIX}%"})
+                cleanup_session.commit()
+            except Exception:
+                cleanup_session.rollback()
     finally:
         cleanup_session.close()
 

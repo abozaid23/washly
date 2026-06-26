@@ -36,6 +36,7 @@ export default function HomePage() {
       router.replace(`/${role === "super_admin" ? "admin" : role}`);
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reflecting localStorage (an external system) into state on mount
     setReady(true);
   }, [router]);
 

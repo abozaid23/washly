@@ -91,10 +91,14 @@ function BookPageContent() {
   const [addingVehicle, setAddingVehicle] = useState(false);
 
   const [dayIndex, setDayIndex] = useState(0);
-  const days = useMemo(buildDays, []);
-  const [slots, setSlots] = useState<Date[]>([]);
+  const days = useMemo(() => buildDays(), []);
+  const slots = useMemo(
+    () => (wash ? buildSlots(days[dayIndex].date, wash.opening_time, wash.closing_time) : []),
+    [wash, days, dayIndex]
+  );
   const [availability, setAvailability] = useState<Map<number, boolean>>(new Map());
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<Date | null>(null);
 
   const [confirming, setConfirming] = useState(false);
@@ -120,22 +124,27 @@ function BookPageContent() {
   }, [washId, router]);
 
   useEffect(() => {
-    if (!wash) return;
-    const day = days[dayIndex].date;
-    const daySlots = buildSlots(day, wash.opening_time, wash.closing_time);
-    setSlots(daySlots);
+    if (!wash || slots.length === 0) return;
+    // Resetting UI state right before kicking off the fetch this effect
+    // exists to perform — not a synchronization of unrelated state.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setSelectedSlot(null);
     setSlotsLoading(true);
+    setSlotsError(null);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
-    Promise.all(daySlots.map((s) => checkAvailability(washId, s.toISOString())))
+    Promise.all(slots.map((s) => checkAvailability(washId, s.toISOString())))
       .then((results) => {
         const map = new Map<number, boolean>();
         results.forEach((r, i) => map.set(i, r.available));
         setAvailability(map);
       })
-      .catch(() => setAvailability(new Map()))
+      .catch(() => {
+        setAvailability(new Map());
+        setSlotsError("معدرنا نتأكد من المواعيد المتاحة، ممكن بعض المواعيد تكون ممتلئة فعلاً");
+      })
       .finally(() => setSlotsLoading(false));
-  }, [wash, dayIndex, days, washId]);
+  }, [wash, slots, washId]);
 
   const picked = useMemo(
     () => services.filter((s) => selectedServiceIds.includes(s.id)),
@@ -223,7 +232,7 @@ function BookPageContent() {
           ) : null}
 
           <p className="mx-auto mt-5 max-w-xs text-xs text-faint">
-            من غير الكود ده، الموظف مش هيقدر يأكد وصولك. هتلاقي الكود برضه في صفحة "حجوزاتي".
+            من غير الكود ده، الموظف مش هيقدر يأكد وصولك. هتلاقي الكود برضه في صفحة &quot;حجوزاتي&quot;.
           </p>
           <Link href="/" className="mt-6 inline-block text-sm font-semibold text-primary">
             رجوع للرئيسية
@@ -355,7 +364,11 @@ function BookPageContent() {
               })}
             </div>
           )}
-          <p className="mt-2 text-xs text-faint">المواعيد المشطوبة ممتلئة — اضغط عليها للدخول في قائمة الانتظار</p>
+          {slotsError ? (
+            <p className="mt-2 text-xs text-danger">{slotsError}</p>
+          ) : (
+            <p className="mt-2 text-xs text-faint">المواعيد المشطوبة ممتلئة — اضغط عليها للدخول في قائمة الانتظار</p>
+          )}
         </section>
       </div>
 

@@ -7,6 +7,7 @@ otp_attempts = {}
 
 MAX_SEND_PER_HOUR = 3
 SEND_WINDOW = timedelta(hours=1)
+MAX_VERIFY_ATTEMPTS = 3
 
 
 def can_send_otp(phone: str) -> bool:
@@ -22,9 +23,11 @@ def generate_otp(phone: str) -> str:
     otp = ''.join(random.choices(string.digits, k=6))
     otp_store[phone] = {
         "otp": otp,
-        "expires_at": datetime.now() + timedelta(minutes=5)
+        "expires_at": datetime.now() + timedelta(minutes=5),
+        "wrong_attempts": 0,
     }
     return otp
+
 
 def verify_otp(phone: str, otp: str) -> bool:
     if phone not in otp_store:
@@ -34,6 +37,9 @@ def verify_otp(phone: str, otp: str) -> bool:
         del otp_store[phone]
         return False
     if data["otp"] != otp:
+        data["wrong_attempts"] += 1
+        if data["wrong_attempts"] >= MAX_VERIFY_ATTEMPTS:
+            del otp_store[phone]
         return False
     del otp_store[phone]
     return True

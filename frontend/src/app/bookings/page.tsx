@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -58,18 +58,21 @@ export default function BookingsPage() {
     setBookings((prev) => prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)));
   }
 
-  const { upcoming, past } = useMemo(() => {
-    const now = Date.now();
-    const upcoming: BookingDetail[] = [];
-    const past: BookingDetail[] = [];
-    for (const b of bookings) {
-      const isFuture = new Date(b.appointment_time).getTime() >= now;
-      const isActiveStatus = b.status === "confirmed" || b.status === "checked_in";
-      if (isFuture && isActiveStatus) upcoming.push(b);
-      else past.push(b);
-    }
-    return { upcoming, past };
-  }, [bookings]);
+  // Not memoized on purpose: "now" must be re-evaluated every render so a
+  // booking moves from upcoming to past as soon as its time passes, even
+  // if `bookings` itself hasn't changed. Comparing against the wall clock
+  // is inherently impure — there's no pure way to express "is this in the
+  // future"; that's what the comparison means.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
+  const upcoming: BookingDetail[] = [];
+  const past: BookingDetail[] = [];
+  for (const b of bookings) {
+    const isFuture = new Date(b.appointment_time).getTime() >= now;
+    const isActiveStatus = b.status === "confirmed" || b.status === "checked_in";
+    if (isFuture && isActiveStatus) upcoming.push(b);
+    else past.push(b);
+  }
 
   return (
     <main className="min-h-screen pb-10">

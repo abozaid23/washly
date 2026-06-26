@@ -19,6 +19,10 @@ export function useRoleGuard(allowed: AuthRole[]) {
       router.replace(ROLE_HOME[role] ?? "/");
       return;
     }
+    // Reading an external system (localStorage) on mount and reflecting it
+    // into state is exactly the sanctioned use of an effect; there's no
+    // way to know "ready" before this check runs.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

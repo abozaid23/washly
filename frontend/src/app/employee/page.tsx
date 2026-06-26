@@ -64,7 +64,6 @@ export default function EmployeeDashboard() {
     refresh()
       .catch((err) => setError(err instanceof ApiError ? err.message : "معدرنا نجيب الشيفت"))
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
   async function handleCheckin(bookingId: number) {
