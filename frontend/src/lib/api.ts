@@ -90,6 +90,63 @@ export function listServices(washId: number | string) {
   return api.get<Service[]>(`/washes/${washId}/services`);
 }
 
+export interface Vehicle {
+  id: number;
+  customer_id: number;
+  brand: string;
+  model: string;
+  year: number;
+  plate_number: string;
+  color: string | null;
+}
+
+export function listVehicles() {
+  return api.get<Vehicle[]>("/vehicles/");
+}
+
+export function createVehicle(data: {
+  brand: string;
+  model: string;
+  year: number;
+  plate_number: string;
+  color?: string;
+}) {
+  return api.post<Vehicle>("/vehicles/", data);
+}
+
+export interface Availability {
+  available: boolean;
+  booked: number;
+  capacity: number;
+}
+
+export function checkAvailability(washId: number | string, appointmentTimeIso: string) {
+  const params = new URLSearchParams({ wash_id: String(washId), appointment_time: appointmentTimeIso });
+  return api.get<Availability>(`/bookings/availability?${params.toString()}`);
+}
+
+export type BookingStatus = "confirmed" | "checked_in" | "completed" | "no_show" | "cancelled";
+
+export interface Booking {
+  id: number;
+  customer_id: number;
+  wash_id: number;
+  appointment_time: string;
+  status: BookingStatus;
+  vehicle_id: number | null;
+}
+
+export function createBooking(data: { wash_id: number; appointment_time: string; vehicle_id?: number }) {
+  return api.post<Booking>("/bookings/", data);
+}
+
+export function joinWaitlist(washId: number, appointmentTimeIso: string) {
+  return api.post<{ message: string; id: number }>("/waitlist/", {
+    wash_id: washId,
+    appointment_time: appointmentTimeIso,
+  });
+}
+
 export const ROLE_HOME: Record<AuthRole, string> = {
   customer: "/",
   employee: "/employee",

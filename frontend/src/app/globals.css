@@ -104,3 +104,22 @@ p {
     scroll-behavior: auto !important;
   }
 }
+
+.input-field {
+  border-radius: 0.75rem;
+  background: var(--color-surface-raised);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  box-shadow: 0 0 0 1px var(--color-border) inset;
+  outline: none;
+  transition: box-shadow 0.2s ease;
+}
+
+.input-field::placeholder {
+  color: var(--color-faint);
+}
+
+.input-field:focus {
+  box-shadow: 0 0 0 2px var(--color-primary) inset;
+}
