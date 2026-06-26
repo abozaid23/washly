@@ -99,7 +99,7 @@ function BookPageContent() {
 
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
-  const [booking, setBooking] = useState<{ id: number } | null>(null);
+  const [booking, setBooking] = useState<{ id: number; access_code: string | null } | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -172,8 +172,9 @@ function BookPageContent() {
         wash_id: wash.id,
         appointment_time: selectedSlot.toISOString(),
         vehicle_id: vehicleId ?? undefined,
+        service_ids: selectedServiceIds,
       });
-      setBooking({ id: result.id });
+      setBooking({ id: result.id, access_code: result.access_code });
     } catch (err) {
       setConfirmError(err instanceof ApiError ? err.message : "معدرنا نأكد الحجز، حاول تاني");
     } finally {
@@ -197,7 +198,7 @@ function BookPageContent() {
   if (booking) {
     return (
       <main className="grid min-h-screen place-items-center px-6 text-center">
-        <div className="animate-[fadeUp_0.5s_cubic-bezier(0.16,1,0.3,1)_both]">
+        <div className="w-full max-w-sm animate-[fadeUp_0.5s_cubic-bezier(0.16,1,0.3,1)_both]">
           <div className="mx-auto mb-4 grid size-16 place-items-center rounded-full bg-primary text-2xl text-primary-ink">
             ✓
           </div>
@@ -211,8 +212,18 @@ function BookPageContent() {
               {formatTime(selectedSlot)}
             </p>
           ) : null}
-          <p className="mx-auto mt-4 max-w-xs text-xs text-faint">
-            كود الوصول وإشعارات التذكير لسه قيد البناء — هتلاقي تفاصيل الحجز في صفحة "حجوزاتي" قريباً.
+
+          {booking.access_code ? (
+            <div className="mt-6 rounded-3xl bg-surface p-6 ring-1 ring-primary/40">
+              <p className="text-xs font-semibold text-muted">كود الوصول — اعطيه للموظف لما توصل</p>
+              <p className="mt-3 text-5xl font-black tracking-[0.2em] text-primary" dir="ltr">
+                {booking.access_code}
+              </p>
+            </div>
+          ) : null}
+
+          <p className="mx-auto mt-5 max-w-xs text-xs text-faint">
+            من غير الكود ده، الموظف مش هيقدر يأكد وصولك. هتلاقي الكود برضه في صفحة "حجوزاتي".
           </p>
           <Link href="/" className="mt-6 inline-block text-sm font-semibold text-primary">
             رجوع للرئيسية

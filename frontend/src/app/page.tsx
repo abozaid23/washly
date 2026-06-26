@@ -67,12 +67,21 @@ export default function HomePage() {
             <Logo size={36} />
             <Wordmark className="text-base" />
           </div>
-          <Link
-            href="/profile"
-            className="grid size-10 place-items-center rounded-full bg-surface ring-1 ring-border text-sm font-bold text-muted transition-colors hover:text-ink"
-          >
-            ؟
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/bookings"
+              className="grid size-10 place-items-center rounded-full bg-surface ring-1 ring-border text-sm font-bold text-muted transition-colors hover:text-ink"
+              aria-label="حجوزاتي"
+            >
+              🗓
+            </Link>
+            <Link
+              href="/profile"
+              className="grid size-10 place-items-center rounded-full bg-surface ring-1 ring-border text-sm font-bold text-muted transition-colors hover:text-ink"
+            >
+              ؟
+            </Link>
+          </div>
         </div>
       </header>
 

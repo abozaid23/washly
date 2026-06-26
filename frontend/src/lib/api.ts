@@ -134,9 +134,23 @@ export interface Booking {
   appointment_time: string;
   status: BookingStatus;
   vehicle_id: number | null;
+  access_code: string | null;
+  total_price: number;
+  total_minutes: number;
 }
 
-export function createBooking(data: { wash_id: number; appointment_time: string; vehicle_id?: number }) {
+export interface BookingDetail extends Booking {
+  wash_name: string;
+  wash_address: string;
+  vehicle_label: string | null;
+}
+
+export function createBooking(data: {
+  wash_id: number;
+  appointment_time: string;
+  vehicle_id?: number;
+  service_ids?: number[];
+}) {
   return api.post<Booking>("/bookings/", data);
 }
 
@@ -145,6 +159,10 @@ export function joinWaitlist(washId: number, appointmentTimeIso: string) {
     wash_id: washId,
     appointment_time: appointmentTimeIso,
   });
+}
+
+export function myBookings() {
+  return api.get<BookingDetail[]>("/bookings/my");
 }
 
 export const ROLE_HOME: Record<AuthRole, string> = {
