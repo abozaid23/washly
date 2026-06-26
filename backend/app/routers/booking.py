@@ -27,6 +27,19 @@ class QuickBooking(BaseModel):
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
 
+def _parse_hhmm(value: str) -> int:
+    """'08:30' -> 510 (minutes since midnight)."""
+    hours, minutes = value.split(":")
+    return int(hours) * 60 + int(minutes)
+
+
+def is_within_operating_hours(wash: Wash, appointment_time: datetime) -> bool:
+    apt_minutes = appointment_time.hour * 60 + appointment_time.minute
+    open_minutes = _parse_hhmm(wash.opening_time)
+    close_minutes = _parse_hhmm(wash.closing_time)
+    return open_minutes <= apt_minutes < close_minutes
+
+
 def get_slot_count(db: Session, wash_id: int, appointment_time: datetime) -> int:
     window_start = appointment_time - timedelta(minutes=30)
     window_end   = appointment_time + timedelta(minutes=30)
@@ -131,7 +144,7 @@ def check_availability(
     if not wash:
         raise HTTPException(status_code=404, detail="المغسلة غير موجودة")
 
-    if not wash.is_active:
+    if not wash.is_active or not is_within_operating_hours(wash, apt_time):
         return {"available": False, "booked": 0, "capacity": wash.capacity or 3}
 
     capacity = wash.capacity or 3
@@ -163,6 +176,11 @@ def create_booking(
         raise HTTPException(status_code=404, detail="المغسلة غير موجودة")
     if not wash.is_active:
         raise HTTPException(status_code=400, detail="المغسلة دي متوقفة دلوقتي ومش بتقبل حجوزات")
+    if not is_within_operating_hours(wash, appointment_time):
+        raise HTTPException(
+            status_code=400,
+            detail=f"المغسلة فاتحة من {wash.opening_time} لـ {wash.closing_time} بس",
+        )
 
     capacity = wash.capacity or 3
     if get_slot_count(db, booking.wash_id, appointment_time) >= capacity:

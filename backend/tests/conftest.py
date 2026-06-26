@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -86,6 +88,17 @@ def make_wash(db, owner_id, name="Test Wash", commission_percent=15.0):
     db.add(wash)
     db.flush()
     return wash
+
+
+def safe_future_datetime(days: int = 1) -> datetime:
+    """Tomorrow-ish at noon UTC — always inside the default 08:00-22:00
+    wash hours, regardless of what time tests happen to run."""
+    base = datetime.now(timezone.utc) + timedelta(days=days)
+    return base.replace(hour=12, minute=0, second=0, microsecond=0)
+
+
+def safe_future_iso(days: int = 1) -> str:
+    return safe_future_datetime(days).isoformat()
 
 
 def token_for(user):

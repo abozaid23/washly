@@ -2,18 +2,14 @@
 Each test recreates the exact exploit that used to work and asserts it's
 now blocked, plus that the legitimate path still works.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 from app.models.user import UserRole
 from app.models.vehicle import Vehicle
 from app.models.service import Service
 from app.models.booking import Booking, BookingStatus
 from app.models.leave import LeaveRequest
-from tests.conftest import make_user, make_wash, auth_headers
-
-
-def future_iso(hours=24):
-    return (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()
+from tests.conftest import make_user, make_wash, auth_headers, safe_future_datetime, safe_future_iso
 
 
 def test_suspended_user_is_blocked_immediately(client, db):
@@ -70,7 +66,7 @@ def test_booking_rejects_other_customers_vehicle(client, db):
     attacker = make_user(db, "01010000005")
     res = client.post("/bookings/", headers=auth_headers(attacker), json={
         "wash_id": wash.id,
-        "appointment_time": future_iso(),
+        "appointment_time": safe_future_iso(),
         "vehicle_id": vehicle.id,
         "service_ids": [service.id],
     })
@@ -85,7 +81,7 @@ def test_customer_cannot_cancel_someone_elses_booking(client, db):
 
     booking = Booking(
         customer_id=victim.id, wash_id=wash.id,
-        appointment_time=datetime.now(timezone.utc) + timedelta(hours=5),
+        appointment_time=safe_future_datetime(),
         status=BookingStatus.confirmed, access_code="123456",
     )
     db.add(booking)
@@ -107,7 +103,7 @@ def test_random_user_cannot_complete_a_booking(client, db):
 
     booking = Booking(
         customer_id=customer.id, wash_id=wash.id,
-        appointment_time=datetime.now(timezone.utc) + timedelta(hours=5),
+        appointment_time=safe_future_datetime(),
         status=BookingStatus.confirmed, access_code="654321",
     )
     db.add(booking)
@@ -126,7 +122,7 @@ def test_owner_checkin_uses_wash_owner_id_not_user_wash_id(client, db):
 
     booking = Booking(
         customer_id=customer.id, wash_id=wash.id,
-        appointment_time=datetime.now(timezone.utc) + timedelta(hours=5),
+        appointment_time=safe_future_datetime(),
         status=BookingStatus.confirmed, access_code="111222",
     )
     db.add(booking)
@@ -175,7 +171,7 @@ def test_rating_only_after_completed_and_only_once(client, db):
 
     booking = Booking(
         customer_id=customer.id, wash_id=wash.id,
-        appointment_time=datetime.now(timezone.utc) + timedelta(hours=5),
+        appointment_time=safe_future_datetime(),
         status=BookingStatus.confirmed, access_code="333444",
     )
     db.add(booking)
@@ -207,7 +203,7 @@ def test_rating_blocked_for_other_customers_booking(client, db):
 
     booking = Booking(
         customer_id=customer.id, wash_id=wash.id,
-        appointment_time=datetime.now(timezone.utc) + timedelta(hours=5),
+        appointment_time=safe_future_datetime(),
         status=BookingStatus.completed, access_code="555666",
     )
     db.add(booking)

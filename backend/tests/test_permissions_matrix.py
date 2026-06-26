@@ -1,7 +1,7 @@
 """Cross-role access matrix: every role tried against endpoints it must
 not be able to use."""
 from app.models.user import UserRole
-from tests.conftest import make_user, make_wash, auth_headers
+from tests.conftest import make_user, make_wash, auth_headers, safe_future_iso
 
 
 def test_customer_cannot_access_any_admin_endpoint(client, db):
@@ -79,10 +79,9 @@ def test_employee_cannot_checkin_a_booking_at_a_different_wash(client, db):
     employee_at_b = make_user(db, "0101000312", role=UserRole.employee, wash_id=wash_b.id)
     customer = make_user(db, "0101000313")
 
-    from datetime import datetime, timedelta, timezone
     res = client.post("/bookings/", headers=auth_headers(customer), json={
         "wash_id": wash_a.id,
-        "appointment_time": (datetime.now(timezone.utc) + timedelta(hours=5)).isoformat(),
+        "appointment_time": safe_future_iso(),
     })
     booking = res.json()
 

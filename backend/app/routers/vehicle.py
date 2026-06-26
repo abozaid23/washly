@@ -23,7 +23,7 @@ def add_vehicle(
     current_user: dict = Depends(get_current_user)
 ):
     customer_id = int(current_user["sub"])
-    new_vehicle = Vehicle(**vehicle.dict(), customer_id=customer_id)
+    new_vehicle = Vehicle(**vehicle.model_dump(), customer_id=customer_id)
     db.add(new_vehicle)
     db.commit()
     db.refresh(new_vehicle)

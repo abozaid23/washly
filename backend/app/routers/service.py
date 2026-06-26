@@ -28,7 +28,7 @@ def add_service(
     wash = db.query(Wash).filter(Wash.id == wash_id, Wash.owner_id == owner_id).first()
     if not wash:
         raise HTTPException(status_code=404, detail="المغسلة غير موجودة")
-    new_service = Service(**service.dict(), wash_id=wash_id)
+    new_service = Service(**service.model_dump(), wash_id=wash_id)
     db.add(new_service)
     db.commit()
     db.refresh(new_service)

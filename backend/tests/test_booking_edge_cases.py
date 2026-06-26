@@ -5,11 +5,7 @@ from datetime import datetime, timedelta, timezone
 from app.models.user import UserRole
 from app.models.service import Service
 from app.models.booking import Booking, BookingStatus
-from tests.conftest import make_user, make_wash, auth_headers
-
-
-def future_iso(hours=24):
-    return (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()
+from tests.conftest import make_user, make_wash, auth_headers, safe_future_datetime, safe_future_iso
 
 
 def test_cannot_book_a_time_in_the_past(client, db):
@@ -32,20 +28,49 @@ def test_cannot_book_a_suspended_wash(client, db):
     customer = make_user(db, "0101000204")
 
     res = client.post("/bookings/", headers=auth_headers(customer), json={
-        "wash_id": wash.id, "appointment_time": future_iso(),
+        "wash_id": wash.id, "appointment_time": safe_future_iso(),
     })
     assert res.status_code == 400
 
     # availability check also reflects the suspension
-    res = client.get("/bookings/availability", params={"wash_id": wash.id, "appointment_time": future_iso()})
+    res = client.get("/bookings/availability", params={"wash_id": wash.id, "appointment_time": safe_future_iso()})
     assert res.status_code == 200
     assert res.json()["available"] is False
+
+
+def test_cannot_book_outside_operating_hours(client, db):
+    owner = make_user(db, "0101000222", role=UserRole.owner)
+    wash = make_wash(db, owner.id)  # default hours: 08:00-22:00
+    customer = make_user(db, "0101000223")
+
+    too_early = safe_future_datetime().replace(hour=5, minute=0)
+    res = client.post("/bookings/", headers=auth_headers(customer), json={
+        "wash_id": wash.id, "appointment_time": too_early.isoformat(),
+    })
+    assert res.status_code == 400
+
+    too_late = safe_future_datetime().replace(hour=23, minute=0)
+    res = client.post("/bookings/", headers=auth_headers(customer), json={
+        "wash_id": wash.id, "appointment_time": too_late.isoformat(),
+    })
+    assert res.status_code == 400
+
+    # availability check agrees
+    res = client.get("/bookings/availability", params={"wash_id": wash.id, "appointment_time": too_early.isoformat()})
+    assert res.status_code == 200
+    assert res.json()["available"] is False
+
+    # exactly at opening time is fine; one minute before closing is fine too
+    at_open = safe_future_datetime().replace(hour=8, minute=0)
+    assert client.post("/bookings/", headers=auth_headers(customer), json={
+        "wash_id": wash.id, "appointment_time": at_open.isoformat(),
+    }).status_code == 200
 
 
 def test_cannot_book_a_nonexistent_wash(client, db):
     customer = make_user(db, "0101000205")
     res = client.post("/bookings/", headers=auth_headers(customer), json={
-        "wash_id": 999999, "appointment_time": future_iso(),
+        "wash_id": 999999, "appointment_time": safe_future_iso(),
     })
     assert res.status_code == 404
 
@@ -56,7 +81,7 @@ def test_full_capacity_blocks_booking_and_waitlist_accepts(client, db):
     wash.capacity = 1
     db.flush()
 
-    slot = future_iso(48)
+    slot = safe_future_iso(2)
     first_customer = make_user(db, "0101000207")
     res = client.post("/bookings/", headers=auth_headers(first_customer), json={
         "wash_id": wash.id, "appointment_time": slot,
@@ -79,7 +104,7 @@ def test_same_customer_cannot_double_book_same_wash_near_same_time(client, db):
     owner = make_user(db, "0101000209", role=UserRole.owner)
     wash = make_wash(db, owner.id)
     customer = make_user(db, "0101000210")
-    slot = future_iso(72)
+    slot = safe_future_iso(3)
 
     res = client.post("/bookings/", headers=auth_headers(customer), json={"wash_id": wash.id, "appointment_time": slot})
     assert res.status_code == 200
@@ -94,7 +119,7 @@ def test_checkin_with_wrong_code_fails_and_correct_code_succeeds(client, db):
     customer = make_user(db, "0101000212")
 
     res = client.post("/bookings/", headers=auth_headers(customer), json={
-        "wash_id": wash.id, "appointment_time": future_iso(),
+        "wash_id": wash.id, "appointment_time": safe_future_iso(),
     })
     booking = res.json()
 
@@ -112,7 +137,7 @@ def test_cannot_checkin_a_booking_twice(client, db):
     customer = make_user(db, "0101000214")
 
     res = client.post("/bookings/", headers=auth_headers(customer), json={
-        "wash_id": wash.id, "appointment_time": future_iso(),
+        "wash_id": wash.id, "appointment_time": safe_future_iso(),
     })
     booking = res.json()
     code = booking["access_code"]
@@ -141,7 +166,7 @@ def test_invalid_status_value_is_rejected(client, db):
     customer = make_user(db, "0101000218")
     booking = Booking(
         customer_id=customer.id, wash_id=wash.id,
-        appointment_time=datetime.now(timezone.utc) + timedelta(hours=5),
+        appointment_time=safe_future_datetime(),
         status=BookingStatus.confirmed, access_code="121212",
     )
     db.add(booking)
@@ -158,7 +183,7 @@ def test_cannot_check_in_directly_via_status_patch(client, db):
     customer = make_user(db, "0101000220")
     booking = Booking(
         customer_id=customer.id, wash_id=wash.id,
-        appointment_time=datetime.now(timezone.utc) + timedelta(hours=5),
+        appointment_time=safe_future_datetime(),
         status=BookingStatus.confirmed, access_code="343434",
     )
     db.add(booking)
