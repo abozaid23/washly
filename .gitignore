@@ -1,7 +1,8 @@
 # OS / editor
 .DS_Store
 *.pem
-.vscode/
+.vscode/*
+!.vscode/launch.json
 .idea/
 
 # impeccable live-mode local state (not project source)
