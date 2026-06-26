@@ -74,6 +74,18 @@ def promote_waitlist(db: Session, wash_id: int, appointment_time: datetime):
             db.rollback()
 
 
+def staff_owns_wash(db: Session, current_user: dict, wash_id: int) -> bool:
+    """True if the authenticated staff member (owner/supervisor/employee) runs this wash."""
+    role = current_user.get("role")
+    uid = int(current_user["sub"])
+    if role == "owner":
+        return db.query(Wash).filter(Wash.owner_id == uid, Wash.id == wash_id).first() is not None
+    if role in ("employee", "supervisor"):
+        user = db.query(User).filter(User.id == uid).first()
+        return bool(user and user.wash_id == wash_id)
+    return False
+
+
 def to_detail(db: Session, booking: Booking) -> BookingDetailResponse:
     wash = db.query(Wash).filter(Wash.id == booking.wash_id).first()
     vehicle_label = None
@@ -158,6 +170,14 @@ def create_booking(
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="لديك حجز بالفعل في هذا الوقت في نفس المغسلة")
+
+    if booking.vehicle_id is not None:
+        vehicle = db.query(Vehicle).filter(
+            Vehicle.id == booking.vehicle_id,
+            Vehicle.customer_id == customer_id,
+        ).first()
+        if not vehicle:
+            raise HTTPException(status_code=404, detail="العربية غير موجودة")
 
     services = []
     if booking.service_ids:
@@ -276,6 +296,24 @@ def update_booking_status(
     if new_status == BookingStatus.checked_in:
         raise HTTPException(status_code=400, detail="لازم تستخدم كود الوصول لتسجيل الوصول")
 
+    role = current_user.get("role")
+    uid = int(current_user["sub"])
+
+    if role == "customer":
+        if booking.customer_id != uid:
+            raise HTTPException(status_code=403, detail="غير مصرح لك")
+        if new_status != BookingStatus.cancelled:
+            raise HTTPException(status_code=403, detail="العميل يقدر يلغي الحجز بس")
+        if booking.status != BookingStatus.confirmed:
+            raise HTTPException(status_code=400, detail="مش ممكن تلغي الحجز ده دلوقتي")
+    elif role in ("employee", "supervisor", "owner"):
+        if not staff_owns_wash(db, current_user, booking.wash_id):
+            raise HTTPException(status_code=403, detail="الحجز غير تابع لمغسلتك")
+        if new_status == BookingStatus.completed and booking.status != BookingStatus.checked_in:
+            raise HTTPException(status_code=400, detail="لازم العميل يوصل ويتأكد الكود الأول")
+    else:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
     wash_id          = booking.wash_id
     appointment_time = booking.appointment_time
 
@@ -303,8 +341,7 @@ def checkin_booking(
     if not booking:
         raise HTTPException(status_code=404, detail="الحجز غير موجود")
 
-    employee = db.query(User).filter(User.id == int(current_user["sub"])).first()
-    if not employee or employee.wash_id != booking.wash_id:
+    if not staff_owns_wash(db, current_user, booking.wash_id):
         raise HTTPException(status_code=403, detail="الحجز غير تابع لمغسلتك")
 
     if booking.status != BookingStatus.confirmed:

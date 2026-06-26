@@ -84,6 +84,16 @@ def respond_leave(
     if not leave:
         raise HTTPException(status_code=404, detail="الطلب غير موجود")
 
+    if current_user.get("role") != "super_admin":
+        if current_user.get("role") != "owner":
+            raise HTTPException(status_code=403, detail="غير مصرح لك")
+        from app.models.user import User
+        owner_id = int(current_user["sub"])
+        wash = db.query(Wash).filter(Wash.owner_id == owner_id).first()
+        employee = db.query(User).filter(User.id == leave.employee_id).first()
+        if not wash or not employee or employee.wash_id != wash.id:
+            raise HTTPException(status_code=403, detail="الطلب ده مش تابع لمغسلتك")
+
     leave.status = status
     db.commit()
     return {"message": "تم تحديث الطلب", "status": status}

@@ -8,6 +8,20 @@ export class ApiError extends Error {
   }
 }
 
+/** FastAPI's `detail` is a string for our own HTTPExceptions, but an array of
+ * {msg, loc, ...} objects for pydantic validation (422) errors. */
+function extractErrorMessage(body: unknown): string {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => (item as { msg?: string })?.msg)
+      .filter((msg): msg is string => Boolean(msg));
+    if (messages.length > 0) return messages.join("، ");
+  }
+  return "حصل خطأ، حاول تاني";
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
@@ -22,7 +36,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new ApiError(body?.detail ?? "حصل خطأ، حاول تاني", res.status);
+    throw new ApiError(extractErrorMessage(body), res.status);
   }
 
   if (res.status === 204) return undefined as T;

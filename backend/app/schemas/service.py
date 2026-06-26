@@ -1,11 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 class ServiceCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    price: float
-    duration_minutes: int
+    price: float = Field(gt=0)
+    duration_minutes: int = Field(gt=0)
     vehicle_type: str = "all"
 
 class ServiceResponse(BaseModel):

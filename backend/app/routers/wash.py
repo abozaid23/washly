@@ -33,6 +33,8 @@ def create_wash(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
+    if current_user.get("role") not in ("owner", "super_admin"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     owner_id = int(current_user["sub"])
     new_wash = Wash(**wash.dict(), owner_id=owner_id)
     db.add(new_wash)

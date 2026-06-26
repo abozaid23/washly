@@ -44,6 +44,8 @@ def verify_otp_route(request: VerifyOTPRequest, db: Session = Depends(get_db)):
         db.add(user)
         db.commit()
         db.refresh(user)
+    elif not user.is_active:
+        raise HTTPException(status_code=403, detail="تم إيقاف حسابك، تواصل مع الدعم")
 
     token = create_access_token({
         "sub": str(user.id),
