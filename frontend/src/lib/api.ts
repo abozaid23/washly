@@ -117,6 +117,26 @@ export function createVehicle(data: {
   return api.post<Vehicle>("/vehicles/", data);
 }
 
+export function deleteVehicle(vehicleId: number) {
+  return api.delete<{ message: string }>(`/vehicles/${vehicleId}`);
+}
+
+export interface Me {
+  id: number;
+  phone: string;
+  name: string | null;
+  email: string | null;
+  role: AuthRole;
+}
+
+export function getMe() {
+  return api.get<Me>("/auth/me");
+}
+
+export function updateMe(data: { name?: string; email?: string }) {
+  return api.patch<Me>("/auth/me", data);
+}
+
 export interface Availability {
   available: boolean;
   booked: number;

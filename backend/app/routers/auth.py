@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.schemas.auth import SendOTPRequest, VerifyOTPRequest, TokenResponse
 from app.utils.auth import create_access_token
+from app.utils.dependencies import get_current_user
 from app.utils.otp import generate_otp, verify_otp
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -54,3 +56,45 @@ def verify_otp_route(request: VerifyOTPRequest, db: Session = Depends(get_db)):
         role=user.role.value,
         name=user.name,
     )
+
+
+@router.get("/me")
+def get_me(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    user = db.query(User).filter(User.id == int(current_user["sub"])).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+    return {
+        "id": user.id,
+        "phone": user.phone,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role.value,
+    }
+
+
+class UpdateMeRequest(BaseModel):
+    name: str | None = None
+    email: str | None = None
+
+
+@router.patch("/me")
+def update_me(
+    data: UpdateMeRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user = db.query(User).filter(User.id == int(current_user["sub"])).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+    if data.name is not None:
+        user.name = data.name
+    if data.email is not None:
+        user.email = data.email
+    db.commit()
+    return {
+        "id": user.id,
+        "phone": user.phone,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role.value,
+    }
