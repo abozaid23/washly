@@ -17,8 +17,8 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ar" dir="rtl" className={cairo.variable}>
-      <body>{children}</body>
+    <html lang="ar" dir="rtl" className={cairo.variable} suppressHydrationWarning>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }
