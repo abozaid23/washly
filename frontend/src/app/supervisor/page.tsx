@@ -4,12 +4,15 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApiError,
+  listServices,
   myEmployees,
   myLeaves,
+  opsWash,
   requestLeave,
   todayBookings,
   type BookingDetail,
   type LeaveRequestItem,
+  type Service,
   type StaffMember,
 } from "@/lib/api";
 import { useRoleGuard } from "@/lib/useRoleGuard";
@@ -44,18 +47,21 @@ export default function SupervisorDashboard() {
   const [bookings, setBookings] = useState<BookingDetail[]>([]);
   const [employees, setEmployees] = useState<StaffMember[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequestItem[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
 
   useEffect(() => {
     if (!ready) return;
-    Promise.all([todayBookings(), myEmployees(), myLeaves()])
-      .then(([bk, emp, lv]) => {
+    Promise.all([todayBookings(), myEmployees(), myLeaves(), opsWash()])
+      .then(([bk, emp, lv, wash]) => {
         setBookings(bk);
         setEmployees(emp);
         setLeaves(lv);
+        return listServices(wash.id);
       })
+      .then((svc) => setServices(svc))
       .catch((err) => setError(err instanceof ApiError ? err.message : "معدرنا نجيب البيانات"))
       .finally(() => setLoading(false));
   }, [ready]);
@@ -96,6 +102,21 @@ export default function SupervisorDashboard() {
           <StatCard label="جاري الشغل" value={byStatus("checked_in").length} accent />
           <StatCard label="خلصت" value={byStatus("completed").length} />
         </section>
+
+        <Section title="الخدمات">
+          {services.length === 0 ? (
+            <p className="text-sm text-muted">لسه مفيش خدمات</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {services.map((s) => (
+                <div key={s.id} className="flex items-center justify-between rounded-xl bg-surface p-3 ring-1 ring-border">
+                  <p className="font-bold text-ink">{s.name}</p>
+                  <p className="text-xs text-faint">{s.price.toFixed(0)} ج · {s.duration_minutes} دقيقة</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
 
         <Section title="حجوزات النهاردة">
           {bookings.length === 0 ? (
@@ -181,7 +202,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function StatCard({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+function StatCard({ label, value, accent }: { label: string; value: number | string; accent?: boolean }) {
   return (
     <div className="rounded-2xl bg-surface p-4 text-center ring-1 ring-border">
       <p className={`text-2xl font-black ${accent ? "text-primary" : "text-ink"}`}>{value}</p>

@@ -250,6 +250,17 @@ export function myWash() {
   return api.get<Wash[]>("/washes/my");
 }
 
+export interface MyWash {
+  id: number;
+  name: string;
+  address: string;
+  commission_percent: number;
+}
+
+export function opsWash() {
+  return api.get<MyWash>("/admin/my-wash");
+}
+
 export interface MyRevenue {
   wash_name: string;
   commission_percent: number;

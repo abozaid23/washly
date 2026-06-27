@@ -109,6 +109,14 @@ def get_revenue(db: Session = Depends(get_db), current_user: dict = Depends(get_
     return {"total_commission_due": total, "washes": result}
 
 
+@router.get("/my-wash")
+def get_my_wash_endpoint(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    check_ops_access(current_user)
+    wash = get_my_wash(db, current_user)
+    if not wash:
+        raise HTTPException(status_code=404, detail="لا توجد مغسلة مرتبطة بحسابك")
+    return {"id": wash.id, "name": wash.name, "address": wash.address, "commission_percent": wash.commission_percent}
+
 @router.get("/my-revenue")
 def get_my_revenue(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     check_owner_or_admin(current_user)
