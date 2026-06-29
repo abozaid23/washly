@@ -17,6 +17,11 @@ class AddEmployeeRequest(BaseModel):
     name: str = None
     role: str = "employee"
 
+class CreateWashOwnerRequest(BaseModel):
+    wash_name: str
+    owner_name: str
+    owner_phone: str
+
 def check_super_admin(current_user: dict):
     if current_user.get("role") != "super_admin":
         raise HTTPException(status_code=403, detail="غير مصرح لك")
@@ -232,3 +237,90 @@ def remove_employee(user_id: int, db: Session = Depends(get_db), current_user: d
     user.role = UserRole.customer
     db.commit()
     return {"message": "تم إزالة الموظف"}
+
+
+# ===== Super-admin: create a new wash + its owner =====
+
+@router.post("/create-wash-owner")
+def create_wash_owner(
+    request: CreateWashOwnerRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    check_super_admin(current_user)
+
+    owner = db.query(User).filter(User.phone == request.owner_phone).first()
+    if owner:
+        # حساب موجود بالفعل — نرقّيه لـ owner لو لسه مش owner (لكن من غير ما
+        # نلمس super_admin أو owner تابع لمغسلة تانية أصلاً)
+        if owner.role == UserRole.super_admin:
+            raise HTTPException(status_code=403, detail="لا يمكن تحويل حساب الأدمن لصاحب مغسلة")
+        if owner.role != UserRole.owner:
+            owner.role = UserRole.owner
+        if request.owner_name:
+            owner.name = request.owner_name
+    else:
+        owner = User(phone=request.owner_phone, name=request.owner_name, role=UserRole.owner)
+        db.add(owner)
+        db.flush()  # need owner.id before creating the wash
+
+    new_wash = Wash(
+        name=request.wash_name,
+        owner_id=owner.id,
+        address="",
+        phone=request.owner_phone,
+        latitude=0.0,
+        longitude=0.0,
+        status="pending_setup",
+    )
+    db.add(new_wash)
+    db.commit()
+    db.refresh(new_wash)
+    db.refresh(owner)
+
+    return {
+        "message": "تم إنشاء المغسلة بنجاح",
+        "wash": {"id": new_wash.id, "name": new_wash.name, "status": new_wash.status},
+        "owner": {"id": owner.id, "phone": owner.phone, "name": owner.name},
+    }
+
+
+# ===== Super-admin: wash approval queue =====
+
+@router.get("/washes/pending-approval")
+def get_pending_approval_washes(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    check_super_admin(current_user)
+    washes = db.query(Wash).filter(Wash.status == "pending_approval").all()
+    return [
+        {
+            "id": w.id,
+            "name": w.name,
+            "address": w.address,
+            "phone": w.phone,
+            "description": w.description,
+            "owner_id": w.owner_id,
+        }
+        for w in washes
+    ]
+
+
+@router.patch("/washes/{wash_id}/approve")
+def approve_wash(wash_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    check_super_admin(current_user)
+    wash = db.query(Wash).filter(Wash.id == wash_id).first()
+    if not wash:
+        raise HTTPException(status_code=404, detail="المغسلة غير موجودة")
+    wash.status = "active"
+    db.commit()
+    return {"message": "تمت الموافقة على المغسلة", "status": wash.status}
+
+
+@router.patch("/washes/{wash_id}/reject")
+def reject_wash(wash_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    check_super_admin(current_user)
+    wash = db.query(Wash).filter(Wash.id == wash_id).first()
+    if not wash:
+        raise HTTPException(status_code=404, detail="المغسلة غير موجودة")
+    wash.status = "rejected"
+    db.commit()
+    return {"message": "تم رفض المغسلة", "status": wash.status}

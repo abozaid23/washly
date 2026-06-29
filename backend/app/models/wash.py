@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -22,3 +22,12 @@ class Wash(Base):
     is_open_now = Column(Boolean, default=True)
     capacity = Column(Integer, default=3)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # --- Owner-onboarding flow ---
+    # status lifecycle: pending_setup -> pending_approval -> active (or rejected)
+    # Existing rows (created before this column existed) default to "active"
+    # via the migration so already-live washes keep showing up for customers.
+    status = Column(String, nullable=False, default="active", server_default="active")
+    description = Column(String, nullable=True)
+    # Per-weekday opening hours, e.g. {"sun": {"open": "08:00", "close": "22:00", "closed": false}, ...}
+    working_hours = Column(JSON, nullable=True)

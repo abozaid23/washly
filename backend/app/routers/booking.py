@@ -15,6 +15,7 @@ from app.models.rating import Rating
 from app.schemas.booking import BookingCreate, BookingResponse, BookingDetailResponse, CheckinRequest
 from app.schemas.rating import RatingCreate, RatingResponse
 from app.utils.dependencies import get_current_user
+from app.utils.push import send_push
 from pydantic import BaseModel
 
 class StatusUpdate(BaseModel):
@@ -109,6 +110,7 @@ def to_detail(db: Session, booking: Booking) -> BookingDetailResponse:
         if vehicle:
             vehicle_label = f"{vehicle.brand} {vehicle.model} · {vehicle.plate_number}"
     rated = db.query(Rating).filter(Rating.booking_id == booking.id).first() is not None
+    customer = db.query(User).filter(User.id == booking.customer_id).first()
     return BookingDetailResponse(
         id=booking.id,
         customer_id=booking.customer_id,
@@ -123,6 +125,8 @@ def to_detail(db: Session, booking: Booking) -> BookingDetailResponse:
         wash_name=wash.name if wash else "",
         wash_address=wash.address if wash else "",
         vehicle_label=vehicle_label,
+        customer_name=customer.name if customer else None,
+        customer_phone=customer.phone if customer else None,
     )
 
 
@@ -155,6 +159,28 @@ def check_availability(
         "booked": count,
         "capacity": capacity,
     }
+
+
+@router.get("/send-reminders")
+def send_reminders(db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    window_start = now + timedelta(minutes=25)
+    window_end = now + timedelta(minutes=35)
+
+    bookings = db.query(Booking).filter(
+        Booking.status == BookingStatus.confirmed,
+        Booking.appointment_time >= window_start,
+        Booking.appointment_time <= window_end,
+    ).all()
+
+    sent = 0
+    for booking in bookings:
+        customer = db.query(User).filter(User.id == booking.customer_id).first()
+        if customer and customer.fcm_token:
+            send_push(customer.fcm_token, "تذكير بموعدك", "موعدك في الغسيل بعد نص ساعة تقريباً")
+            sent += 1
+
+    return {"sent": sent}
 
 
 @router.post("/", response_model=BookingResponse)
@@ -234,6 +260,14 @@ def create_booking(
     if services:
         db.commit()
 
+    customer = db.query(User).filter(User.id == customer_id).first()
+    if customer:
+        send_push(
+            customer.fcm_token,
+            "تأكيد الحجز",
+            f"تم حجزك في {wash.name} — كودك: {new_booking.access_code}",
+        )
+
     return new_booking
 
 
@@ -304,6 +338,28 @@ def today_bookings(
     return [to_detail(db, b) for b in bookings]
 
 
+@router.get("/by-code/{code}", response_model=BookingDetailResponse)
+def get_booking_by_code(
+    code: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") not in ("employee", "supervisor"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    booking = db.query(Booking).filter(
+        Booking.access_code == code.strip(),
+        Booking.status.in_([BookingStatus.confirmed, BookingStatus.checked_in]),
+    ).order_by(Booking.created_at.desc()).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="الكود غير صحيح أو الحجز غير نشط")
+
+    if not staff_owns_wash(db, current_user, booking.wash_id):
+        raise HTTPException(status_code=403, detail="الحجز غير تابع لمغسلتك")
+
+    return to_detail(db, booking)
+
+
 @router.patch("/{booking_id}/status", response_model=BookingResponse)
 def update_booking_status(
     booking_id: int,
@@ -347,6 +403,11 @@ def update_booking_status(
     booking.status = new_status
     db.commit()
     db.refresh(booking)
+
+    if new_status == BookingStatus.completed:
+        customer = db.query(User).filter(User.id == booking.customer_id).first()
+        if customer:
+            send_push(customer.fcm_token, "واشلي", "عربيتك جاهزة ✨")
 
     if new_status in [BookingStatus.cancelled, BookingStatus.no_show]:
         promote_waitlist(db, wash_id, appointment_time)

@@ -60,6 +60,10 @@ export default function OwnerDashboard() {
         const w = washes[0];
         setWash(w ?? null);
         if (!w) return;
+        if (w.status === "pending_setup") {
+          router.replace("/owner/setup");
+          return;
+        }
         return Promise.all([
           myRevenue(),
           listServicesForOwner(w.id),
@@ -147,6 +151,46 @@ export default function OwnerDashboard() {
     return (
       <main className="grid min-h-screen place-items-center px-6 text-center">
         <p className="text-sm text-muted">لا توجد مغسلة مرتبطة بحسابك</p>
+      </main>
+    );
+  }
+
+  if (wash.status === "pending_setup") {
+    // Redirect already in-flight (see effect above) — avoid flashing the
+    // full dashboard with empty data while the router navigates.
+    return <DashboardSkeleton />;
+  }
+
+  if (wash.status === "pending_approval") {
+    return (
+      <main className="grid min-h-screen place-items-center px-6 text-center">
+        <div className="max-w-sm">
+          <p className="text-2xl">⏳</p>
+          <h1 className="mt-3 text-lg font-bold text-ink">مغسلتك في انتظار الموافقة</h1>
+          <p className="mt-2 text-sm text-muted">
+            بياناتك بقت كاملة، وفريق Washly بيراجعها دلوقتي. هنفعّل الحساب فور الموافقة.
+          </p>
+          <button onClick={() => logout(router)} className="mt-6 text-sm font-semibold text-muted hover:text-danger">
+            خروج
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (wash.status === "rejected") {
+    return (
+      <main className="grid min-h-screen place-items-center px-6 text-center">
+        <div className="max-w-sm">
+          <p className="text-2xl">✕</p>
+          <h1 className="mt-3 text-lg font-bold text-ink">تم رفض طلب المغسلة</h1>
+          <p className="mt-2 text-sm text-muted">
+            تواصل مع فريق Washly لمعرفة التفاصيل.
+          </p>
+          <button onClick={() => logout(router)} className="mt-6 text-sm font-semibold text-muted hover:text-danger">
+            خروج
+          </button>
+        </div>
       </main>
     );
   }

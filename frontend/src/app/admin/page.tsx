@@ -1,19 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApiError,
   allUsers,
   allWashes,
+  approveWash,
+  createWashOwner,
   networkRevenue,
+  pendingApprovalWashes,
+  rejectWash,
   toggleUser,
   toggleWash,
   type AdminUser,
   type AdminWash,
   type NetworkRevenue,
+  type PendingWash,
 } from "@/lib/api";
 import { useRoleGuard } from "@/lib/useRoleGuard";
+import { Button } from "@/components/Button";
 
 const ROLE_LABEL: Record<string, string> = {
   customer: "عميل",
@@ -36,21 +42,67 @@ export default function SuperAdminDashboard() {
   const [washes, setWashes] = useState<AdminWash[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [revenue, setRevenue] = useState<NetworkRevenue | null>(null);
+  const [pending, setPending] = useState<PendingWash[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userQuery, setUserQuery] = useState("");
 
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
+
   useEffect(() => {
     if (!ready) return;
-    Promise.all([allWashes(), allUsers(), networkRevenue()])
-      .then(([w, u, r]) => {
+    Promise.all([allWashes(), allUsers(), networkRevenue(), pendingApprovalWashes()])
+      .then(([w, u, r, p]) => {
         setWashes(w);
         setUsers(u);
         setRevenue(r);
+        setPending(p);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "معدرنا نجيب بيانات الشبكة"))
       .finally(() => setLoading(false));
   }, [ready]);
+
+  async function handleCreateWashOwner(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setCreateLoading(true);
+    setCreateMessage(null);
+    const form = new FormData(e.currentTarget);
+    try {
+      await createWashOwner({
+        wash_name: String(form.get("wash_name")),
+        owner_name: String(form.get("owner_name")),
+        owner_phone: String(form.get("owner_phone")),
+      });
+      setCreateMessage("تم إنشاء المغسلة — هتظهر لصاحبها عشان يكمل بياناتها");
+      e.currentTarget.reset();
+      setShowCreateForm(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "معدرنا ننشئ المغسلة");
+    } finally {
+      setCreateLoading(false);
+    }
+  }
+
+  async function handleApprove(id: number) {
+    try {
+      await approveWash(id);
+      setPending((prev) => prev.filter((w) => w.id !== id));
+      setWashes(await allWashes());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "معدرنا نوافق على المغسلة");
+    }
+  }
+
+  async function handleReject(id: number) {
+    try {
+      await rejectWash(id);
+      setPending((prev) => prev.filter((w) => w.id !== id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "معدرنا نرفض المغسلة");
+    }
+  }
 
   async function handleToggleWash(id: number) {
     try {
@@ -92,6 +144,7 @@ export default function SuperAdminDashboard() {
 
       <div className="mx-auto max-w-3xl px-5">
         {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
+        {createMessage ? <p className="mt-4 text-sm text-success">{createMessage}</p> : null}
 
         <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard label="مغاسل شغالة" value={`${activeWashes}/${washes.length}`} />
@@ -107,7 +160,59 @@ export default function SuperAdminDashboard() {
           />
         </section>
 
+        <Section title="مغاسل في انتظار الموافقة">
+          {pending.length === 0 ? (
+            <p className="text-sm text-muted">لا توجد مغاسل في انتظار الموافقة دلوقتي</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {pending.map((w) => (
+                <div key={w.id} className="rounded-xl bg-surface p-3 ring-1 ring-border">
+                  <p className="font-bold text-ink">{w.name}</p>
+                  {w.description ? <p className="mt-0.5 text-xs text-faint">{w.description}</p> : null}
+                  <p className="mt-0.5 text-xs text-faint" dir="ltr">{w.phone}</p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => handleApprove(w.id)}
+                      className="flex-1 rounded-lg bg-success/15 py-1.5 text-xs font-bold text-success"
+                    >
+                      وافق
+                    </button>
+                    <button
+                      onClick={() => handleReject(w.id)}
+                      className="flex-1 rounded-lg bg-danger/15 py-1.5 text-xs font-bold text-danger"
+                    >
+                      ارفض
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
         <Section title="المغاسل">
+          {showCreateForm ? (
+            <form onSubmit={handleCreateWashOwner} className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-surface p-3 ring-1 ring-border">
+              <input name="wash_name" required placeholder="اسم المغسلة" className="input-field col-span-2" />
+              <input name="owner_name" required placeholder="اسم صاحب المغسلة" className="input-field" />
+              <input name="owner_phone" required placeholder="رقم تليفونه" className="input-field" dir="ltr" />
+              <div className="col-span-2 flex gap-2">
+                <Button type="submit" loading={createLoading} className="flex-1 !py-2.5 !text-sm">
+                  إنشاء المغسلة
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setShowCreateForm(false)} className="!px-4 !py-2.5 !text-sm">
+                  إلغاء
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="mb-3 w-full rounded-xl bg-surface py-2.5 text-sm font-bold text-primary ring-1 ring-dashed ring-border"
+            >
+              + إضافة مغسلة جديدة
+            </button>
+          )}
           <div className="flex flex-col gap-2">
             {washes.map((w) => {
               const washRevenue = revenue?.washes.find((r) => r.wash_id === w.id);

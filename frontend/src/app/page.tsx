@@ -6,6 +6,8 @@ import Link from "next/link";
 import { listWashes, type Wash } from "@/lib/api";
 import { Logo, Wordmark } from "@/components/Logo";
 import { WashMap } from "@/components/WashMap";
+import { formatDistanceKm, haversineDistanceKm } from "@/lib/geo";
+import { requestNotificationPermission } from "@/lib/push";
 
 type SortMode = "nearest" | "rating" | "open";
 
@@ -24,6 +26,9 @@ export default function HomePage() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortMode>("nearest");
   const [activeId, setActiveId] = useState<number | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -42,6 +47,11 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!ready) return;
+    requestNotificationPermission().catch(() => {});
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready) return;
     listWashes()
       .then((data) => {
         setWashes(data);
@@ -51,12 +61,50 @@ export default function HomePage() {
       .finally(() => setLoading(false));
   }, [ready]);
 
+  function handleLocateMe() {
+    setLocationError(null);
+    if (!("geolocation" in navigator)) {
+      setLocationError("متصفحك مش بيدعم تحديد الموقع");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+        setSort("nearest");
+        setLocating(false);
+      },
+      (err) => {
+        setLocating(false);
+        if (err.code === err.PERMISSION_DENIED) {
+          setLocationError("لازم تسمح بالوصول لموقعك عشان نلاقي أقرب مغسلة ليك");
+        } else {
+          setLocationError("معدرنا نحدد موقعك دلوقتي، حاول تاني");
+        }
+      }
+    );
+  }
+
+  const distanceById = useMemo(() => {
+    if (!userLocation) return new Map<number, number>();
+    const map = new Map<number, number>();
+    for (const w of washes) {
+      map.set(w.id, haversineDistanceKm(userLocation.lat, userLocation.lng, w.latitude, w.longitude));
+    }
+    return map;
+  }, [washes, userLocation]);
+
   const filtered = useMemo(() => {
     let list = washes.filter((w) => w.name.includes(query) || w.address.includes(query));
     if (sort === "rating") list = [...list].sort((a, b) => b.rating - a.rating);
     if (sort === "open") list = list.filter((w) => w.is_open_now);
+    if (sort === "nearest" && userLocation) {
+      list = [...list].sort(
+        (a, b) => (distanceById.get(a.id) ?? Infinity) - (distanceById.get(b.id) ?? Infinity)
+      );
+    }
     return list;
-  }, [washes, query, sort]);
+  }, [washes, query, sort, userLocation, distanceById]);
 
   if (!ready) return null;
 
@@ -103,17 +151,20 @@ export default function HomePage() {
           {SORTS.map((s) => (
             <button
               key={s.id}
-              onClick={() => setSort(s.id)}
-              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+              onClick={() => (s.id === "nearest" ? handleLocateMe() : setSort(s.id))}
+              disabled={s.id === "nearest" && locating}
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-60 ${
                 sort === s.id
                   ? "bg-primary text-primary-ink"
                   : "bg-surface text-muted ring-1 ring-border hover:text-ink"
               }`}
             >
-              {s.label}
+              {s.id === "nearest" && locating ? "بنحدد موقعك…" : s.label}
             </button>
           ))}
         </div>
+
+        {locationError ? <p className="mt-3 text-sm text-danger">{locationError}</p> : null}
 
         <div className="mt-5 flex flex-col gap-3">
           {loading ? (
@@ -130,6 +181,7 @@ export default function HomePage() {
                 active={wash.id === activeId}
                 style={{ animationDelay: `${i * 50}ms` }}
                 onMouseEnter={() => setActiveId(wash.id)}
+                distanceKm={distanceById.get(wash.id) ?? null}
               />
             ))
           )}
@@ -144,11 +196,13 @@ function WashCard({
   active,
   style,
   onMouseEnter,
+  distanceKm,
 }: {
   wash: Wash;
   active: boolean;
   style?: React.CSSProperties;
   onMouseEnter: () => void;
+  distanceKm?: number | null;
 }) {
   return (
     <Link
@@ -179,6 +233,9 @@ function WashCard({
             ★ {wash.rating.toFixed(1)}
           </span>
           <span dir="ltr">{wash.opening_time} – {wash.closing_time}</span>
+          {distanceKm != null ? (
+            <span className="font-semibold text-accent">{formatDistanceKm(distanceKm)}</span>
+          ) : null}
         </div>
       </div>
     </Link>

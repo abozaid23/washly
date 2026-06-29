@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ApiError,
   checkinBooking,
@@ -114,6 +115,14 @@ export default function EmployeeDashboard() {
 
       <div className="mx-auto max-w-2xl px-5">
         {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
+
+        <Link
+          href="/employee/scan"
+          className="mt-6 flex items-center justify-between rounded-2xl bg-primary px-5 py-4 text-primary-ink shadow-[0_8px_24px_-8px_oklch(0.80_0.16_113_/_0.45)] transition-[transform] active:scale-[0.98]"
+        >
+          <span className="text-sm font-bold">استلام عميل بكود الحجز</span>
+          <span className="text-lg">←</span>
+        </Link>
 
         <Section title="في الانتظار — أكد الوصول">
           {pending.length === 0 ? (

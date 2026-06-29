@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any
 
 class WashCreate(BaseModel):
     name: str
@@ -24,6 +24,17 @@ class WashResponse(BaseModel):
     closing_time: str
     is_active: bool
     is_open_now: bool
+    status: str = "active"
+    description: Optional[str] = None
+    working_hours: Optional[Any] = None
 
     class Config:
         from_attributes = True
+
+
+class WashSetupRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    working_hours: Optional[dict] = None

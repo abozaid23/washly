@@ -61,6 +61,16 @@ export interface TokenResponse {
   name: string | null;
 }
 
+export type WashStatus = "pending_setup" | "pending_approval" | "active" | "rejected";
+
+export interface WorkingHoursDay {
+  open: string;
+  close: string;
+  closed: boolean;
+}
+
+export type WorkingHours = Record<string, WorkingHoursDay>;
+
 export interface Wash {
   id: number;
   name: string;
@@ -74,6 +84,9 @@ export interface Wash {
   closing_time: string;
   is_active: boolean;
   is_open_now: boolean;
+  status: WashStatus;
+  description: string | null;
+  working_hours: WorkingHours | null;
 }
 
 export function sendOtp(phone: string) {
@@ -181,6 +194,8 @@ export interface BookingDetail extends Booking {
   wash_address: string;
   vehicle_label: string | null;
   rated: boolean;
+  customer_name: string | null;
+  customer_phone: string | null;
 }
 
 export function createBooking(data: {
@@ -382,3 +397,58 @@ export const ROLE_HOME: Record<AuthRole, string> = {
   owner: "/owner",
   super_admin: "/admin",
 };
+
+// ===== Admin: create wash + owner =====
+
+export function createWashOwner(data: { wash_name: string; owner_name: string; owner_phone: string }) {
+  return api.post<{
+    message: string;
+    wash: { id: number; name: string; status: WashStatus };
+    owner: { id: number; phone: string; name: string | null };
+  }>("/admin/create-wash-owner", data);
+}
+
+// ===== Admin: wash approval queue =====
+
+export interface PendingWash {
+  id: number;
+  name: string;
+  address: string;
+  phone: string;
+  description: string | null;
+  owner_id: number;
+}
+
+export function pendingApprovalWashes() {
+  return api.get<PendingWash[]>("/admin/washes/pending-approval");
+}
+
+export function approveWash(washId: number) {
+  return api.patch<{ message: string; status: WashStatus }>(`/admin/washes/${washId}/approve`, {});
+}
+
+export function rejectWash(washId: number) {
+  return api.patch<{ message: string; status: WashStatus }>(`/admin/washes/${washId}/reject`, {});
+}
+
+// ===== Owner: onboarding wizard =====
+
+export function setupWash(washId: number | string, data: {
+  name?: string;
+  description?: string;
+  latitude?: number;
+  longitude?: number;
+  working_hours?: WorkingHours;
+}) {
+  return api.patch<Wash>(`/washes/${washId}/setup`, data);
+}
+
+// ===== Employee: scan booking by access code =====
+
+export function bookingByCode(code: string) {
+  return api.get<BookingDetail>(`/bookings/by-code/${encodeURIComponent(code)}`);
+}
+
+export function updateBookingStatus(bookingId: number, status: BookingStatus) {
+  return api.patch<Booking>(`/bookings/${bookingId}/status`, { status });
+}

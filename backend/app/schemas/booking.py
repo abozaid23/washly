@@ -27,6 +27,8 @@ class BookingDetailResponse(BookingResponse):
     wash_address: str
     vehicle_label: Optional[str] = None
     rated: bool = False
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
 
 class CheckinRequest(BaseModel):
     access_code: str

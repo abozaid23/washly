@@ -105,3 +105,21 @@ def update_me(
         "email": user.email,
         "role": user.role.value,
     }
+
+
+class FcmTokenUpdate(BaseModel):
+    fcm_token: str
+
+
+@router.patch("/fcm-token")
+def update_fcm_token(
+    data: FcmTokenUpdate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user = db.query(User).filter(User.id == int(current_user["sub"])).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+    user.fcm_token = data.fcm_token
+    db.commit()
+    return {"message": "تم تسجيل التوكين بنجاح"}
