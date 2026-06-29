@@ -6,12 +6,12 @@ otp_store = {}
 otp_attempts = {}
 
 MAX_SEND_PER_HOUR = 3
-SEND_WINDOW = timedelta(hours=1)
+SEND_WINDOW = timedelta(minutes=10)
 MAX_VERIFY_ATTEMPTS = 3
 
 
 def can_send_otp(phone: str) -> bool:
-    """Rate limit: at most MAX_SEND_PER_HOUR OTP requests per phone per hour."""
+    """Rate limit: at most MAX_SEND_PER_HOUR OTP requests per phone per SEND_WINDOW."""
     now = datetime.now()
     attempts = [t for t in otp_attempts.get(phone, []) if now - t < SEND_WINDOW]
     otp_attempts[phone] = attempts

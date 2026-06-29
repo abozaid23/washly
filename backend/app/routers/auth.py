@@ -25,7 +25,7 @@ def send_otp(request: SendOTPRequest, db: Session = Depends(get_db)):
     if not can_send_otp(phone):
         raise HTTPException(
             status_code=429,
-            detail="عدد محاولات كبير، حاول تاني بعد ساعة",
+            detail="عدد محاولات كبير، حاول تاني بعد 10 دقايق",
         )
     otp = generate_otp(phone)
     print(f"OTP for {phone}: {otp}")
