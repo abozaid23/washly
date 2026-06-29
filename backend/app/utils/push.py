@@ -1,3 +1,4 @@
+import json
 import os
 
 import firebase_admin
@@ -6,14 +7,20 @@ from firebase_admin import credentials, messaging
 _firebase_app = None
 
 _service_account_file = os.getenv("FIREBASE_SERVICE_ACCOUNT_FILE")
+_service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
 
+_cert = None
 if _service_account_file and os.path.exists(_service_account_file):
-    if not firebase_admin._apps:
-        _firebase_app = firebase_admin.initialize_app(credentials.Certificate(_service_account_file))
-    else:
-        _firebase_app = firebase_admin.get_app()
+    _cert = credentials.Certificate(_service_account_file)
+elif _service_account_json:
+    # Hosting platforms like Railway don't support uploading the JSON file
+    # directly — the whole file contents are pasted into this env var instead.
+    _cert = credentials.Certificate(json.loads(_service_account_json))
+
+if _cert:
+    _firebase_app = firebase_admin.get_app() if firebase_admin._apps else firebase_admin.initialize_app(_cert)
 else:
-    print(f"[push] Firebase service account file not found ({_service_account_file}) — push notifications disabled")
+    print("[push] no Firebase service account configured — push notifications disabled")
 
 
 def send_push(fcm_token: str | None, title: str, body: str) -> None:
