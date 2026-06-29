@@ -81,7 +81,8 @@ export default function HomePage() {
         } else {
           setLocationError("معدرنا نحدد موقعك دلوقتي، حاول تاني");
         }
-      }
+      },
+      { timeout: 10000 }
     );
   }
 
