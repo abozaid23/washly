@@ -128,7 +128,7 @@ export default function SuperAdminDashboard() {
     (u) => !userQuery || u.phone.includes(userQuery) || (u.name ?? "").includes(userQuery)
   );
 
-  const activeWashes = washes.filter((w) => w.is_active).length;
+  const activeWashes = washes.filter((w) => w.is_active && w.status === "active").length;
 
   return (
     <main className="min-h-screen pb-16">
@@ -220,8 +220,17 @@ export default function SuperAdminDashboard() {
                 <div key={w.id} className="rounded-xl bg-surface p-3 ring-1 ring-border">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0">
-                      <p className={`font-bold ${w.is_active ? "text-ink" : "text-faint line-through"}`}>
+                      <p className={`flex items-center gap-2 font-bold ${w.is_active ? "text-ink" : "text-faint line-through"}`}>
                         {w.name}
+                        {w.status !== "active" && (
+                          <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
+                            {w.status === "pending_setup"
+                              ? "لسه بيكمل بياناته"
+                              : w.status === "pending_approval"
+                              ? "في انتظار الموافقة"
+                              : "مرفوضة"}
+                          </span>
+                        )}
                       </p>
                       <p className="truncate text-xs text-faint">{w.address}</p>
                     </div>

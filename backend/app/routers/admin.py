@@ -7,6 +7,7 @@ from app.models.booking import Booking, BookingStatus
 from app.routers.booking import to_detail
 from app.schemas.booking import BookingDetailResponse
 from app.utils.dependencies import get_current_user
+from app.routers.auth import normalize_phone
 from pydantic import BaseModel
 from typing import List
 
@@ -50,7 +51,7 @@ def get_my_wash(db: Session, current_user: dict) -> Wash | None:
 def get_all_washes(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     check_super_admin(current_user)
     washes = db.query(Wash).all()
-    return [{"id": w.id, "name": w.name, "address": w.address, "phone": w.phone, "is_active": w.is_active, "is_open_now": w.is_open_now, "opening_time": w.opening_time, "closing_time": w.closing_time, "commission_percent": w.commission_percent} for w in washes]
+    return [{"id": w.id, "name": w.name, "address": w.address, "phone": w.phone, "is_active": w.is_active, "is_open_now": w.is_open_now, "opening_time": w.opening_time, "closing_time": w.closing_time, "commission_percent": w.commission_percent, "status": w.status} for w in washes]
 
 @router.get("/users")
 def get_all_users(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -248,6 +249,11 @@ def create_wash_owner(
     current_user: dict = Depends(get_current_user),
 ):
     check_super_admin(current_user)
+
+    phone = normalize_phone(request.owner_phone)
+    if len(phone) < 10 or not phone.isdigit():
+        raise HTTPException(status_code=400, detail="اكتب رقم تليفون صحيح لصاحب المغسلة")
+    request.owner_phone = phone
 
     owner = db.query(User).filter(User.phone == request.owner_phone).first()
     if owner:

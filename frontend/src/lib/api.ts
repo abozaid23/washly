@@ -348,6 +348,7 @@ export interface AdminWash {
   opening_time: string;
   closing_time: string;
   commission_percent: number;
+  status: WashStatus;
 }
 
 export function allWashes() {
